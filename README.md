@@ -14,3 +14,13 @@ Semua bisa diubah lewat `PINS ...` / `pinXX n` lalu `APPLY` dan `SAVE`. Pin stra
 
 ## Koneksi
 UART 115200, TCP port 5000, web port 80. Tanpa WiFi, ESP32 membuka AP `Plotter-XXXX` (password `plotter123`) di 192.168.4.1. Ketik `HELP` untuk daftar perintah.
+
+## Firmware siap pakai (1 file)
+`release/esp-plotter-full.bin` — gabungan bootloader + partition table + aplikasi. Flash ke ESP32 (4 MB) di alamat **0x0**:
+
+```
+python -m esptool --chip esp32 -p COMx -b 460800 write_flash 0x0 release/esp-plotter-full.bin
+```
+
+Atau pakai Flash Download Tool Espressif / https://espressif.github.io/esp-launchpad/ (custom bin, alamat 0x0). Setelah itu buka serial 115200 dan ketik `HELP`.
+Setelan (NVS) dan file job (SPIFFS) dibuat otomatis saat pertama boot.
