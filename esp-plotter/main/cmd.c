@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 #include "esp_spiffs.h"
 #include "esp_system.h"
+#include "esp_ota_ops.h"
 #include "motion.h"
 #include "settings.h"
 #include "io.h"
@@ -203,7 +204,7 @@ static void help(sink_t* s) {
   static const char* const L[] = {
     "GERAK (butuh diam): R/L/U/D mm | XY dx dy | SQ mm | BOX mm | CIRCLE r | BOXCIRCLE mm | HOME | CAL (kiri-kanan-bawah-atas, ukur area)",
     "STREAM: MV x y (mm absolut dari titik nol) | PU | PD | PEN UP|DOWN  (balasan ok / full)",
-    "STATUS: ST | POS | LIM | PINSTAT | SHOW | LIST | VER | STOP   KALIBRASI MANUAL: ZERO (posisi ini = 0,0) | SETPOS x y",
+    "OTA info slot | REBOOT   STATUS: ST | POS | LIM | PINSTAT | SHOW | LIST | VER | STOP   KALIBRASI MANUAL: ZERO (posisi ini = 0,0) | SETPOS x y",
     "SETELAN: LIST | GET nama | SET nama nilai | nama nilai | V S A DV HV | HDIR x y | AREA w h | SVUS min max",
     "PIN: PINS [sa da sb db sv lx ly en] lalu APPLY | SAVE (ke NVS) | CLEAR (bawaan) | RESET",
     "SERVO: ANGLE n | EN 0|1",
@@ -256,6 +257,13 @@ static int exec_locked(char* buf, sink_t* s) {
 
   if (!strcmp(C, "HELP")) { help(s); return r_ok(s); }
   if (!strcmp(C, "VER")) { out(s, "VER esp-plotter 1.0 (ESP-IDF %s)", esp_get_idf_version()); return r_ok(s); }
+  if (!strcmp(C, "OTA")) {                 // info slot firmware; OTA sendiri lewat HTTP POST /ota
+    const esp_partition_t* run = esp_ota_get_running_partition();
+    const esp_partition_t* nxt = esp_ota_get_next_update_partition(NULL);
+    out(s, "OTA jalan=%s sisa=%s ukuran_slot=%u", run ? run->label : "?", nxt ? nxt->label : "?", nxt ? (unsigned)nxt->size : 0u);
+    return r_ok(s);
+  }
+  if (!strcmp(C, "REBOOT")) { out(s, "restart"); r_ok(s); vTaskDelay(pdMS_TO_TICKS(300)); esp_restart(); return 0; }
   if (!strcmp(C, "STOP")) {
     job_stop();
     motion_abort();

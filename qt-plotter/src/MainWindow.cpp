@@ -8,6 +8,10 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -383,6 +387,52 @@ QWidget* MainWindow::buildFlashTab() {
     v->addWidget(fsInfo_);
     v->addWidget(files_);
     v->addLayout(h);
+
+    // Update firmware lewat WiFi (OTA): kirim esp-plotter.bin ke http://IP/ota
+    auto* g = new QGroupBox("Update firmware (OTA lewat WiFi)");
+    auto* gv = new QVBoxLayout(g);
+    auto* row = new QHBoxLayout;
+    auto* ip = new QLineEdit;
+    ip->setPlaceholderText("IP ESP32, mis. 192.168.1.50");
+    ip->setText(host_->text());
+    auto* pick = new QPushButton("Pilih .bin & Update");
+    row->addWidget(new QLabel("IP:"));
+    row->addWidget(ip, 1);
+    row->addWidget(pick);
+    auto* bar = new QProgressBar;
+    bar->setRange(0, 100);
+    auto* note = new QLabel("Pilih esp-plotter.bin (bukan esp-plotter-full.bin). Plotter harus diam. ESP32 restart sendiri; firmware yang gagal jalan dikembalikan otomatis.");
+    note->setWordWrap(true);
+    gv->addLayout(row);
+    gv->addWidget(bar);
+    gv->addWidget(note);
+    v->addWidget(g);
+    connect(pick, &QPushButton::clicked, this, [this, ip, bar, pick] {
+        const QString host = ip->text().trimmed();
+        if (host.isEmpty()) { QMessageBox::warning(this, "OTA", "Isi IP ESP32 dulu (lihat perintah IP di Terminal)."); return; }
+        const QString path = QFileDialog::getOpenFileName(this, "Firmware", QString(), "Firmware (*.bin)");
+        if (path.isEmpty()) return;
+        auto* f = new QFile(path);
+        if (!f->open(QIODevice::ReadOnly)) { delete f; QMessageBox::warning(this, "OTA", "File tidak bisa dibuka."); return; }
+        QNetworkRequest rq(QUrl("http://" + host + "/ota"));
+        rq.setHeader(QNetworkRequest::ContentTypeHeader, "application/octet-stream");
+        rq.setTransferTimeout(60000);
+        auto* nam = new QNetworkAccessManager(this);
+        QNetworkReply* rep = nam->post(rq, f);
+        f->setParent(rep);
+        pick->setEnabled(false);
+        bar->setValue(0);
+        connect(rep, &QNetworkReply::uploadProgress, this, [bar](qint64 a, qint64 b) { if (b > 0) bar->setValue(int(a * 100 / b)); });
+        connect(rep, &QNetworkReply::finished, this, [this, rep, nam, bar, pick] {
+            const QByteArray body = rep->readAll().trimmed();
+            const bool ok = rep->error() == QNetworkReply::NoError;
+            pick->setEnabled(true);
+            if (ok) { bar->setValue(100); QMessageBox::information(this, "OTA", "Selesai. ESP32 restart; sambungkan ulang setelah beberapa detik."); }
+            else QMessageBox::warning(this, "OTA gagal", rep->errorString() + (body.isEmpty() ? QString() : "\n" + QString::fromUtf8(body)));
+            rep->deleteLater();
+            nam->deleteLater();
+        });
+    });
     return w;
 }
 

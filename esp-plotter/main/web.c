@@ -3,6 +3,11 @@
 #include <string.h>
 #include "esp_http_server.h"
 #include "cmd.h"
+#include "motion.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern const char index_html_start[] asm("_binary_index_html_start");
 extern const char index_html_end[] asm("_binary_index_html_end");
@@ -73,6 +78,31 @@ static esp_err_t h_upload(httpd_req_t* r) {
   return httpd_resp_sendstr(r, "ok\n");
 }
 
+// POST /ota : badan = firmware .bin (esp-plotter.bin, bukan esp-plotter-full.bin). Tulis ke slot OTA lain, lalu restart.
+static esp_err_t h_ota(httpd_req_t* r) {
+  if (!motion_idle()) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, "busy: plotter sedang bergerak");
+  if (r->content_len < 65536) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, "file terlalu kecil, bukan firmware");
+  const esp_partition_t* p = esp_ota_get_next_update_partition(NULL);
+  if (!p || r->content_len > p->size) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, "file lebih besar dari slot OTA");
+  motion_enable(false);
+  esp_ota_handle_t oh;
+  if (esp_ota_begin(p, r->content_len, &oh) != ESP_OK) return httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "ota begin gagal");
+  static char b[1024];
+  int left = r->content_len;
+  while (left > 0) {
+    int n = httpd_req_recv(r, b, left < (int)sizeof b ? left : (int)sizeof b);
+    if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+    if (n <= 0 || esp_ota_write(oh, b, n) != ESP_OK) { esp_ota_abort(oh); return ESP_FAIL; }
+    left -= n;
+  }
+  if (esp_ota_end(oh) != ESP_OK) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, "image tidak valid (pakai esp-plotter.bin)");
+  if (esp_ota_set_boot_partition(p) != ESP_OK) return httpd_resp_send_err(r, HTTPD_500_INTERNAL_SERVER_ERROR, "set boot gagal");
+  httpd_resp_sendstr(r, "ok restart\n");
+  vTaskDelay(pdMS_TO_TICKS(800));
+  esp_restart();
+  return ESP_OK;
+}
+
 void web_start(void) {
   httpd_config_t c = HTTPD_DEFAULT_CONFIG();
   c.stack_size = 8192;
@@ -84,5 +114,7 @@ void web_start(void) {
   httpd_uri_t u3 = {.uri = "/upload", .method = HTTP_POST, .handler = h_upload};
   httpd_register_uri_handler(h, &u1);
   httpd_register_uri_handler(h, &u2);
+  httpd_uri_t u4 = {.uri = "/ota", .method = HTTP_POST, .handler = h_ota};
   httpd_register_uri_handler(h, &u3);
+  httpd_register_uri_handler(h, &u4);
 }

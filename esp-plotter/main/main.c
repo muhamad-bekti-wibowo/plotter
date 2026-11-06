@@ -1,5 +1,8 @@
 // Plotter CoreXY di ESP32 (ESP-IDF). Core 1: pulsa STEP (task motion). Core 0: jaringan, parser, job.
 #include "esp_spiffs.h"
+#include "esp_ota_ops.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "settings.h"
 #include "motion.h"
 #include "cmd.h"
@@ -22,5 +25,8 @@ void app_main(void) {
   net_start();
   web_start();
   led_start();
+  // OTA dengan rollback: firmware baru dianggap sehat bila sampai sini tanpa crash/reboot
+  vTaskDelay(pdMS_TO_TICKS(3000));
+  esp_ota_mark_app_valid_cancel_rollback();
   io_log("siap: esp-plotter 1.0 (ketik HELP)");
 }

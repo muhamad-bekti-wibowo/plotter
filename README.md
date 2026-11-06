@@ -30,3 +30,10 @@ Setelan (NVS) dan file job (SPIFFS) dibuat otomatis saat pertama boot.
 Saat pertama dijalankan, exe mengekstrak dirinya sekali ke `%LOCALAPPDATA%\EmbeddedPlotter\`, lalu membuka aplikasi. Peluncuran berikutnya langsung terbuka.
 Data kalibrasi manual disimpan di `%APPDATA%\EmbeddedPlotter\QtPlotter\calibration_data.jsonl`.
 Untuk menghapus: hapus folder `%LOCALAPPDATA%\EmbeddedPlotter`.
+
+## Update firmware lewat WiFi (OTA)
+
+Setelah firmware ber-OTA di-flash lewat kabel sekali (tabel partisi berubah jadi 2 slot aplikasi), update berikutnya bisa lewat WiFi:
+tab **Flash** di aplikasi → isi IP ESP32 → **Pilih .bin & Update** → pilih `release/esp-plotter-ota.bin`.
+Atau lewat terminal: `curl --data-binary @release/esp-plotter-ota.bin http://IP-ESP32/ota`.
+Firmware baru yang crash saat boot dikembalikan otomatis ke versi sebelumnya. Perintah `OTA` menampilkan slot yang dipakai.
