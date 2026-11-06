@@ -8,6 +8,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include "GcodeImport.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -463,9 +464,20 @@ void MainWindow::toggleConnect() {
 void MainWindow::jog(const QString& dir) { link_->send(QString("%1 %2").arg(dir).arg(step_->value())); }
 
 void MainWindow::openFile() {
-    QString f = QFileDialog::getOpenFileName(this, "Buka gambar", QString(), "SVG & gambar (*.svg *.png *.jpg *.jpeg *.bmp *.gif);;Semua (*)");
+    QString f = QFileDialog::getOpenFileName(this, "Buka gambar", QString(), "SVG, G-code & gambar (*.svg *.gcode *.nc *.ngc *.gc *.tap *.png *.jpg *.jpeg *.bmp *.gif);;Semua (*)");
     if (f.isEmpty()) return;
-    if (f.endsWith(".svg", Qt::CaseInsensitive)) {
+    static const QStringList gExt = {"gcode", "nc", "ngc", "gc", "tap"};
+    if (gExt.contains(QFileInfo(f).suffix().toLower())) {
+        QFile file(f);
+        if (!file.open(QIODevice::ReadOnly)) return;
+        GcodeResult r = parseGcode(file.readAll());
+        if (!r.error.isEmpty()) { QMessageBox::warning(this, "G-code", r.error); return; }
+        fromRaster_ = false;
+        raster_ = QImage();
+        applySource(r.paths, QString("%1 (G-code, %2 baris)\nGaris %3 mm, perjalanan pena naik %4 mm")
+                                 .arg(QFileInfo(f).fileName()).arg(r.lines).arg(r.draw, 0, 'f', 0).arg(r.travel, 0, 'f', 0)
+                                 + (r.warning.isEmpty() ? "" : "\n" + r.warning));
+    } else if (f.endsWith(".svg", Qt::CaseInsensitive)) {
         QFile file(f);
         if (!file.open(QIODevice::ReadOnly)) return;
         SvgResult r = parseSvg(file.readAll());

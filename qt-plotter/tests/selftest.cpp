@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QPainter>
 #include <cstdio>
+#include "../src/GcodeImport.h"
 #include "../src/ImageTracer.h"
 #include "../src/PathPlanner.h"
 #include "../src/SvgImport.h"
@@ -73,6 +74,18 @@ int main(int argc, char** argv) {
     QString out = pathsToSvg(t, QRectF(0, 0, sz.width(), sz.height()));
     SvgResult rr = parseSvg(out.toUtf8());
     CHECK(rr.error.isEmpty() && !rr.paths.isEmpty());
+
+    // G-code: kotak 20x10 dengan pena Z, lalu busur setengah lingkaran G2, dan mode tanpa pena
+    GcodeResult g = parseGcode("G21 G90\nG0 X0 Y0\nG1 Z-1\nG1 X20\nG1 Y10\nG1 X0\nG1 Y0\nG0 Z5\nG0 X30 Y0\nG1 Z-1\nG2 X50 Y0 I10 J0\nG0 Z5\n");
+    CHECK(g.error.isEmpty());
+    CHECK(g.paths.size() == 2);
+    CHECK(std::abs(g.draw - (60 + 31.4159)) < 1.0);
+    QRectF gb = boundsOf(g.paths);
+    CHECK(std::abs(gb.width() - 50) < 0.1 && std::abs(gb.height() - 10) < 0.2);
+    GcodeResult g2 = parseGcode("G0 X0 Y0\nG1 X10 Y0\nG1 X10 Y10\nG0 X50 Y50\nG1 X60 Y50\n");
+    CHECK(g2.paths.size() == 2);
+    GcodeResult g3 = parseGcode("G20\nG0 X0 Y0\nM3\nG1 X1 Y0\nM5\n");
+    CHECK(g3.paths.size() == 1 && std::abs(g3.draw - 25.4) < 0.01);
 
     std::printf(fails ? "\n%d GAGAL\n" : "\nSEMUA OK\n", fails);
     return fails ? 1 : 0;

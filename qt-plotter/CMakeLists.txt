@@ -11,7 +11,7 @@ qt_add_executable(QtPlotter WIN32
     src/main.cpp src/MainWindow.cpp src/MainWindow.h
     src/Transport.cpp src/Transport.h
     src/PlotterLink.cpp src/PlotterLink.h
-    src/SvgImport.cpp src/SvgImport.h
+    src/SvgImport.cpp src/SvgImport.h src/GcodeImport.cpp src/GcodeImport.h
     src/ImageTracer.cpp src/ImageTracer.h
     src/PathPlanner.cpp src/PathPlanner.h
     src/CanvasView.cpp src/CanvasView.h
@@ -24,6 +24,6 @@ if(TARGET Qt6::SerialPort)
 endif()
 
 # Uji logika tanpa hardware: cmake --build build --target selftest && build\selftest.exe
-qt_add_executable(selftest tests/selftest.cpp src/SvgImport.cpp src/ImageTracer.cpp src/PathPlanner.cpp)
+qt_add_executable(selftest tests/selftest.cpp src/GcodeImport.cpp src/SvgImport.cpp src/ImageTracer.cpp src/PathPlanner.cpp)
 target_link_libraries(selftest PRIVATE Qt6::Gui)
 target_compile_definitions(selftest PRIVATE _USE_MATH_DEFINES)
