@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP Plotter</title>
+<style>
+body{font:15px system-ui,sans-serif;margin:0;padding:12px;background:#111;color:#eee;max-width:900px;margin:auto}
+h2{margin:.2em 0}fieldset{border:1px solid #444;margin:10px 0;border-radius:6px}
+button{padding:7px 12px;margin:2px;background:#2a5;border:0;color:#fff;border-radius:4px;cursor:pointer}
+button.r{background:#b33}button.g{background:#456}input{background:#222;color:#eee;border:1px solid #555;padding:5px;border-radius:4px}
+pre{background:#000;padding:8px;height:180px;overflow:auto;margin:4px 0;font-size:13px}
+table{width:100%;border-collapse:collapse}td{padding:2px 4px;border-bottom:1px solid #333;font-size:13px}td input{width:90px}
+</style></head><body>
+<h2>ESP Plotter</h2><div id=st>-</div>
+<fieldset><legend>Kontrol</legend>
+Langkah <input id=step type=number value=10 style="width:70px"> mm
+<button onclick="c('R '+v())">R</button><button onclick="c('L '+v())">L</button>
+<button onclick="c('U '+v())">U</button><button onclick="c('D '+v())">D</button>
+<button onclick="c('HOME')">HOME</button><button onclick="c('PEN UP')" class=g>Pena naik</button>
+<button onclick="c('PEN DOWN')" class=g>Pena turun</button><button class=r onclick="c('STOP')">STOP</button>
+</fieldset>
+<fieldset><legend>Terminal</legend><pre id=log></pre>
+<input id=cmd style="width:70%" placeholder="perintah, mis. BOX 20" onkeydown="if(event.key=='Enter')send()"><button onclick="send()">Kirim</button></fieldset>
+<fieldset><legend>Setelan (NVS)</legend><button onclick="load()">Muat</button><button onclick="c('SAVE')">SAVE ke flash</button>
+<button onclick="c('APPLY')">APPLY pin</button><button class=r onclick="if(confirm('Reset ke bawaan?'))c('CLEAR')">CLEAR</button>
+<table id=set></table></fieldset>
+<fieldset><legend>File di flash</legend><input type=file id=f><button onclick="up()">Unggah</button><button onclick="ls()">Daftar</button>
+<table id=files></table></fieldset>
+<script>
+const $=i=>document.getElementById(i),v=()=>$('step').value;
+async function c(t){const r=await fetch('/cmd',{method:'POST',body:t});const x=await r.text();
+ const l=$('log');l.textContent+='> '+t+'\n'+x;l.scrollTop=l.scrollHeight;return x}
+function send(){const e=$('cmd');if(e.value){c(e.value);e.value=''}}
+async function load(){const x=await c('LIST');const t=$('set');t.innerHTML='';
+ x.split('\n').filter(s=>s.startsWith('S ')).forEach(s=>{const p=s.split(' ');const n=p[1];
+  const tr=t.insertRow();tr.innerHTML='<td>'+n+'</td><td><input value="'+p[2]+'" onchange="c(\''+n+' \'+this.value)"></td><td>'+p.slice(5).join(' ')+'</td>'})}
+async function ls(){const x=await c('LS');const t=$('files');t.innerHTML='';
+ x.split('\n').filter(s=>s.startsWith('F ')).forEach(s=>{const p=s.split(' ');const tr=t.insertRow();
+  tr.innerHTML='<td>'+p[1]+'</td><td>'+p[2]+' B</td><td><button onclick="c(\'RUN '+p[1]+'\')">Jalankan</button><button class=r onclick="c(\'DEL '+p[1]+'\').then(ls)">Hapus</button></td>'})}
+async function up(){const f=$('f').files[0];if(!f)return;await fetch('/upload?name='+encodeURIComponent(f.name),{method:'POST',body:await f.arrayBuffer()});ls()}
+setInterval(async()=>{try{const x=await(await fetch('/cmd',{method:'POST',body:'ST'})).text();$('st').textContent=x.split('\n')[0]}catch(e){$('st').textContent='terputus'}},1500);
+load();ls();
+</script></body></html>

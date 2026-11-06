@@ -1,0 +1,19 @@
+# Build output
+esp-plotter/build/
+esp-plotter/sdkconfig
+esp-plotter/sdkconfig.old
+qt-plotter/build/
+pico-test/.pio/
+pico-test/.vscode/ipch/
+
+# Data lokal (hasil kalibrasi di mesin Anda)
+calibration_data.jsonl
+
+# IDE / OS
+.vs/
+*.user
+Thumbs.db
+.DS_Store
+__pycache__/
+*.pyc
+esp-plotter/.vscode/

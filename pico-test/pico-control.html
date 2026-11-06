@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kontrol Motor Pico</title>
+<style>
+  :root { --bg:#12151a; --panel:#1b2027; --panel2:#232a33; --line:#2f3743; --txt:#e6e9ee; --mute:#8a94a3; --acc:#4aa3ff; --ok:#3ecf8e; --err:#ff5c5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0 10px 0 0; }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; padding:12px; max-width:1100px; margin:auto; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 10px; font-weight:600; }
+  button { background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:7px 12px; font:inherit; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--acc); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#06121f; font-weight:600; }
+  button.danger { background:var(--err); border-color:var(--err); color:#200505; font-weight:700; }
+  input, select { background:#0f1318; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
+  input[type=number] { width:84px; }
+  label { color:var(--mute); font-size:12px; display:inline-flex; align-items:center; gap:6px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .row + .row { margin-top:10px; }
+  #dot { width:10px; height:10px; border-radius:50%; background:var(--err); display:inline-block; }
+  #dot.on { background:var(--ok); }
+  .pad { display:grid; grid-template-columns:repeat(3,64px); gap:8px; justify-content:center; margin:6px 0 12px; }
+  .pad button { height:64px; font-size:24px; }
+  .pos { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .pos div { background:var(--panel2); border-radius:6px; padding:6px 8px; }
+  .pos small { display:block; color:var(--mute); font-size:11px; }
+  .pos b { font:600 15px ui-monospace,Consolas,monospace; }
+  #log { height:180px; overflow:auto; background:#0b0e12; border-radius:6px; padding:6px 8px; font:12px ui-monospace,Consolas,monospace; white-space:pre-wrap; }
+  #log .tx { color:var(--acc); } #log .er { color:var(--err); }
+  #warn { display:none; background:#3a1d1d; color:#ffb4b4; padding:8px 12px; }
+</style>
+</head>
+<body>
+<div id="warn">Browser ini tidak mendukung Web Serial. Pakai Chrome atau Edge (desktop).</div>
+<header>
+  <h1>Kontrol Motor Pico</h1>
+  <span id="dot"></span>
+  <button id="btnConn" class="primary">Hubungkan</button>
+  <button id="btnStop" class="danger" disabled>■ STOP</button>
+  <span id="state" style="margin-left:auto;color:var(--mute)">Terputus</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Gerak</h2>
+    <div class="pad">
+      <span></span><button data-d="U" title="Atas (↑)">▲</button><span></span>
+      <button data-d="L" title="Kiri (←)">◀</button><button id="btnSq" title="Kotak: kanan, atas, kiri, bawah">▢</button><button data-d="R" title="Kanan (→)">▶</button>
+      <span></span><button data-d="D" title="Bawah (↓)">▼</button><span></span>
+    </div>
+    <div class="row" style="justify-content:center">
+      <label>Jarak <select id="step"><option>0.1</option><option>0.5</option><option>1</option><option>5</option><option selected>10</option><option>20</option><option>50</option></select> mm</label>
+    </div>
+    <div class="row" style="justify-content:center">
+      <label>dX <input type="number" id="dx" value="10" step="1"></label>
+      <label>dY <input type="number" id="dy" value="10" step="1"></label>
+      <button id="btnXY">Gerak XY</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Posisi</h2>
+    <div class="pos">
+      <div><small>X (mm)</small><b id="pX">-</b></div>
+      <div><small>Y (mm)</small><b id="pY">-</b></div>
+      <div><small>Motor A</small><b id="pA">-</b></div>
+      <div><small>Motor B</small><b id="pB">-</b></div>
+    </div>
+    <div class="row"><small style="color:var(--mute)">A, B dalam langkah. X = (A+B)/2, Y = (A−B)/2 (CoreXY).</small></div>
+  </section>
+
+  <section class="card">
+    <h2>Kotak, kalibrasi &amp; pena</h2>
+    <div class="row">
+      <label>Sisi kotak <input type="number" id="boxN" value="20" min="1" step="1"> mm</label>
+      <button id="btnBox" class="primary" title="Pena turun, kotak kanan-atas-kiri-bawah, pena naik">Gambar kotak</button>
+      <button id="btnSq2" title="Kotak tanpa menurunkan pena">Kotak (tanpa pena)</button>
+    </div>
+    <div class="row">
+      <button id="btnBoxCirc" class="primary" title="Kotak sisi di atas + lingkaran di dalamnya (diameter = sisi kotak)">Kotak + lingkaran</button>
+      <label>Jari-jari <input type="number" id="circR" value="10" min="1" step="1"> mm</label>
+      <button id="btnCirc" title="Lingkaran saja, mulai di titik ini, pusat ke kanan">Lingkaran</button>
+    </div>
+    <div class="row">
+      <button id="btnHome" class="primary" title="Cari tombol batas X (GPIO7) dan Y (GPIO8), titik itu jadi X0 Y0">Kalibrasi otomatis (HOME)</button>
+      <span>Batas: <b id="limX">X ?</b> · <b id="limY">Y ?</b></span>
+    </div>
+    <div class="row">
+      <label>Arah ke tombol X <select id="hdx"><option value="-1">kiri (−)</option><option value="1">kanan (+)</option></select></label>
+      <label>Y <select id="hdy"><option value="-1">bawah (−)</option><option value="1">atas (+)</option></select></label>
+      <button id="btnHdir">Set arah</button>
+    </div>
+    <div class="row">
+      <label>Mundur dari tombol <input type="number" id="hoff" value="10" min="0" step="1"> mm</label>
+      <label>Area <input type="number" id="areaW" value="100" min="1"> × <input type="number" id="areaH" value="100" min="1"> mm</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="hcenter" checked> Setelah HOME pindah ke tengah area</label>
+      <button id="btnHset">Simpan</button>
+    </div>
+    <div class="row">
+      <button id="btnPenUp">Pena naik</button>
+      <button id="btnPenDn">Pena turun</button>
+      <label>Sudut <input type="range" id="svA" min="0" max="180" value="0" style="width:120px"> <b id="svAv">0</b>°</label>
+    </div>
+    <div class="row">
+      <label>Naik <input type="number" id="svUp" value="0" min="0" max="180"></label>
+      <label>Turun <input type="number" id="svDn" value="90" min="0" max="180"></label>
+      <button id="btnSv">Simpan sudut</button>
+    </div>
+  </section>
+
+  <section class="card" style="grid-column:1/-1">
+    <h2>Gambar dari SVG</h2>
+    <div class="row">
+      <input type="file" id="svgFile" accept=".svg,image/svg+xml" hidden>
+      <button id="btnSvg">Pilih SVG…</button>
+      <label>Lebar <input type="number" id="svgW" value="40" min="1" step="1"> mm</label>
+      <label>Tinggi <input type="number" id="svgH" min="1" step="1" placeholder="otomatis"> mm</label>
+      <label>Skala <input type="number" id="svgS" value="100" min="1" step="10"> %</label>
+      <button id="btnSvgFit" title="Perbesar/perkecil agar pas di area kerja (dikurangi geser X/Y)">Muat ke area</button>
+      <label>Geser X <input type="number" id="svgOx" value="0" step="1"> Y <input type="number" id="svgOy" value="0" step="1"> mm</label>
+      <button id="btnSvgMid" title="Letakkan gambar di tengah area kerja">Tengahkan</button>
+      <label>Kecepatan gambar <input type="number" id="drawV" value="2" min="0.1" step="0.5"> mm/s</label>
+    </div>
+    <div class="row">
+      <label>Toleransi <input type="number" id="svgTol" value="0.1" min="0.01" step="0.05"> mm</label>
+      <label><input type="checkbox" id="svgOpt" checked> Urutkan jalur</label>
+      <button id="btnSvgRun" class="primary" disabled>▶ Gambar</button>
+      <span id="svgInfo" style="color:var(--mute)">Belum ada SVG</span>
+    </div>
+    <canvas id="svgView" style="width:100%;height:240px;background:#0b0e12;border-radius:6px;margin-top:8px"></canvas>
+    <div style="height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:8px"><i id="svgProg" style="display:block;height:100%;width:0;background:var(--ok)"></i></div>
+    <small style="color:var(--mute)">Titik 0,0 = titik nol hasil HOME. Hanya garis tepi digambar (isi/warna diabaikan); teks harus diubah ke path dulu. Jalankan HOME sebelum menggambar.</small>
+  </section>
+
+  <section class="card">
+    <h2>Kecepatan &amp; kalibrasi</h2>
+    <div class="row">
+      <label>Mikrostep (MS1-3)
+        <select id="pMicro">
+          <option value="1">Full (semua kosong)</option>
+          <option value="2">1/2 (MS1)</option>
+          <option value="4" selected>1/4 (MS2)</option>
+          <option value="8">1/8 (MS1+MS2)</option>
+          <option value="16">1/16 (MS1+MS2+MS3)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Mekanik
+        <select id="pMech">
+          <option value="40" selected>Belt GT2, pulley 20 gigi</option>
+          <option value="32">Belt GT2, pulley 16 gigi</option>
+          <option value="8">Leadscrew T8 (lead 8 mm)</option>
+          <option value="2">Leadscrew T8 (lead 2 mm)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Profil kecepatan
+        <select id="pSpeed">
+          <option value="pelan" selected>Pelan (aman untuk tes)</option>
+          <option value="sedang">Sedang</option>
+          <option value="cepat">Cepat (naik kalau motor kuat)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row"><small id="pInfo" style="color:var(--mute)"></small></div>
+    <div class="row">
+      <label>Kecepatan maks <input type="number" id="v" value="1" min="0.1" step="0.5"> mm/s</label>
+      <label>Awal <input type="number" id="s" value="1" min="0.1" step="0.5"> mm/s</label>
+    </div>
+    <div class="row">
+      <label>Percepatan <input type="number" id="a" value="50" min="1" step="10"> mm/s²</label>
+      <label>Langkah/mm <input type="number" id="spmm" value="80" min="1" step="1"></label>
+    </div>
+    <div class="row">
+      <label>Lebar pulsa <input type="number" id="pulse" value="4" min="1" max="50"> µs</label>
+      <button id="btnApply" class="primary">Terapkan</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="invA"> Balik motor A</label>
+      <label><input type="checkbox" id="invB"> Balik motor B</label>
+      <label><input type="checkbox" id="en" checked> Driver aktif</label>
+    </div>
+    <div class="row">
+      <button id="btnSave" class="primary" title="Simpan semua pengaturan (kecepatan, kalibrasi, area, HOME, servo) ke memori flash Pico">Simpan ke flash</button>
+      <button id="btnClear" title="Hapus pengaturan tersimpan; Pico kembali ke nilai bawaan">Hapus simpanan</button>
+      <small id="saveInfo" style="color:var(--mute)"></small>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Konsol</h2>
+    <div id="log"></div>
+    <div class="row">
+      <input id="cmd" style="flex:1" placeholder="Perintah (HELP, SHOW, R 10, …)" disabled>
+      <button id="btnSend" disabled>Kirim</button>
+      <button id="btnClr">Bersihkan</button>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let port = null, writer = null, reader = null, poll = null, rx = '';
+let spmm = 80;
+
+function log(t, cls) {
+  const d = $('log'), e = document.createElement('div');
+  if (cls) e.className = cls; e.textContent = t; d.appendChild(e);
+  while (d.childNodes.length > 400) d.removeChild(d.firstChild);
+  d.scrollTop = d.scrollHeight;
+}
+const write = s => writer ? writer.write(new TextEncoder().encode(s + '\n')).catch(e => log('Tulis gagal: ' + e.message, 'er')) : Promise.resolve();
+const send = (c, quiet) => { if (!quiet) log('> ' + c, 'tx'); return write(c); };
+
+async function connect() {
+  try { port = await navigator.serial.requestPort(); await port.open({ baudRate:115200 }); }
+  catch (e) { log('Gagal membuka port: ' + e.message, 'er'); port = null; return; }
+  writer = port.writable.getWriter();
+  setConnected(true); readLoop();
+  firstShow = true;
+  setTimeout(() => send('SHOW'), 300);          // Pico yang punya simpanan di flash dipakai apa adanya; kalau belum, kirim preset terpilih
+  poll = setInterval(() => { send('POS', true); send('LIM', true); }, 500);
+}
+async function disconnect() {
+  clearInterval(poll);
+  try { await reader?.cancel(); } catch {}
+  try { writer?.releaseLock(); } catch {}
+  try { await port?.close(); } catch {}
+  port = writer = reader = null; setConnected(false);
+}
+async function readLoop() {
+  const dec = new TextDecoder();
+  reader = port.readable.getReader();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      rx += dec.decode(value, { stream:true });
+      let i;
+      while ((i = rx.search(/[\r\n]/)) >= 0) { const l = rx.slice(0, i).trim(); rx = rx.slice(i + 1); if (l) onLine(l); }
+    }
+  } catch (e) { log('Koneksi terputus: ' + e.message, 'er'); }
+  try { reader.releaseLock(); } catch {}
+  if (port) disconnect();
+}
+
+let waiter = null, stBusy = true, stQ = 1, firstShow = false;
+function onLine(l) {
+  let sm = /^ST q=(\d+) busy=(\d)/.exec(l);
+  if (sm) { stQ = +sm[1]; stBusy = sm[2] === '1'; return; }
+  if (waiter && /^(ok|full|busy|stopped|error)/.test(l)) { const w = waiter; waiter = null; w(l); return; }
+  let m = /^A=(-?\d+) B=(-?\d+)/.exec(l);
+  if (m) {
+    const A = +m[1], B = +m[2];
+    $('pA').textContent = A; $('pB').textContent = B;
+    $('pX').textContent = ((A + B) / 2 / spmm).toFixed(2);
+    $('pY').textContent = ((A - B) / 2 / spmm).toFixed(2);
+    return;                                   // balasan POS tidak masuk konsol
+  }
+  m = /^LIM X=(\d) Y=(\d)/.exec(l);
+  if (m) {
+    for (const [id, nm, v] of [['limX', 'X', m[1]], ['limY', 'Y', m[2]]]) {
+      $(id).textContent = nm + (v === '1' ? ' TERTEKAN' : ' bebas'); $(id).style.color = v === '1' ? 'var(--err)' : 'var(--ok)';
+    }
+    return;
+  }
+  m = /^spmm=(\d+) vmax=(\d+) vstart=(\d+) accel=(\d+) invA=(\d) invB=(\d) svUp=(\d+) svDn=(\d+) hdir=(-?\d),(-?\d) area=(\d+),(\d+) hoff=(\d+) hcenter=(\d)/.exec(l);
+  if (m) {
+    $('areaW').value = m[11]; $('areaH').value = m[12]; $('hoff').value = m[13]; $('hcenter').checked = m[14] === '1';
+    $('svUp').value = m[7]; $('svDn').value = m[8]; $('hdx').value = m[9]; $('hdy').value = m[10];
+    spmm = +m[1];
+    $('spmm').value = spmm; $('v').value = +(m[2] / spmm).toFixed(2); $('s').value = +(m[3] / spmm).toFixed(2);
+    $('a').value = +(m[4] / spmm).toFixed(1); $('invA').checked = m[5] === '1'; $('invB').checked = m[6] === '1';
+    const saved = /saved=1/.test(l);
+    $('saveInfo').textContent = saved ? 'Pengaturan tersimpan di flash' : 'Belum ada simpanan di flash';
+    if (firstShow) { firstShow = false; if (!saved) setTimeout(applyPreset, 0); }
+  }
+  log(l, /^(error|busy)/.test(l) ? 'er' : '');
+}
+
+function setConnected(on) {
+  $('dot').classList.toggle('on', on);
+  $('btnConn').textContent = on ? 'Putuskan' : 'Hubungkan';
+  $('state').textContent = on ? 'Terhubung' : 'Terputus';
+  for (const el of document.querySelectorAll('[data-d],#btnSq,#btnXY,#btnApply,#btnStop,#cmd,#btnSend,#invA,#invB,#en,#btnSvgRun,#btnBox,#btnSq2,#btnBoxCirc,#btnCirc,#circR,#btnHome,#btnHdir,#btnHset,#btnSave,#btnClear,#hoff,#areaW,#areaH,#hcenter,#btnPenUp,#btnPenDn,#svA,#btnSv')) el.disabled = !on;
+}
+
+$('btnConn').onclick = () => writer ? disconnect() : connect();
+$('btnStop').onclick = async () => { svgAbort = true; await send('STOP'); send('PEN UP'); };
+document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => send(`${b.dataset.d} ${$('step').value}`));
+$('btnSq').onclick = () => send(`SQ ${$('step').value}`);
+$('btnBox').onclick = () => send(`BOX ${+$('boxN').value || 20}`);
+$('btnBoxCirc').onclick = () => send(`BOXCIRCLE ${+$('boxN').value || 20}`);
+$('btnCirc').onclick = () => send(`CIRCLE ${+$('circR').value || 10}`);
+$('btnSq2').onclick = () => send(`SQ ${+$('boxN').value || 20}`);
+// HOME memakai kecepatan profil: kirim dulu pengaturan halaman (Pico melupakannya saat dicabut), baru HOME
+$('btnHome').onclick = async () => { await $('btnApply').onclick(); await send('HOME'); };
+$('btnHdir').onclick = () => send(`HDIR ${$('hdx').value} ${$('hdy').value}`);
+$('btnHset').onclick = async () => {
+  await send(`HOFF ${+$('hoff').value || 0}`); await send(`AREA ${+$('areaW').value || 100} ${+$('areaH').value || 100}`);
+  await send(`HCENTER ${$('hcenter').checked ? 1 : 0}`);
+};
+$('btnSave').onclick = async () => {              // kirim semua isian halaman, lalu simpan
+  await $('btnApply').onclick(); await $('btnHset').onclick(); await $('btnSv').onclick(); await $('btnHdir').onclick();
+  await send('SAVE'); send('SHOW', true);
+};
+$('btnClear').onclick = async () => { await send('CLEAR'); send('SHOW', true); };
+$('btnPenUp').onclick =() => send('PEN UP');
+$('btnPenDn').onclick = () => send('PEN DOWN');
+let svT = 0;
+$('svA').oninput = () => { $('svAv').textContent = $('svA').value; const n = Date.now(); if (n - svT > 80) { svT = n; send(`ANGLE ${$('svA').value}`, true); } };
+$('svA').onchange = () => send(`ANGLE ${$('svA').value}`, true);
+$('btnSv').onclick = async () => { await send(`SVUP ${+$('svUp').value}`); await send(`SVDN ${+$('svDn').value}`); };
+$('btnXY').onclick = () => send(`XY ${+$('dx').value || 0} ${+$('dy').value || 0}`);
+$('btnApply').onclick = async () => {
+  const n = +$('spmm').value || 80;
+  await send(`SPMM ${n}`); spmm = n;           // SPMM dulu: V, S, A dikonversi memakainya
+  await send(`V ${+$('v').value || 1}`); await send(`S ${+$('s').value || 1}`); await send(`A ${+$('a').value || 100}`);
+  await send(`PULSE ${+$('pulse').value || 4}`); await send('SHOW');
+};
+// Preset: motor 200 langkah/putaran. Profil dalam langkah/detik supaya aman di mikrostep apa pun.
+const PROFILES = { pelan:[100, 400, 4000], sedang:[200, 1000, 10000], cepat:[300, 2000, 20000] };   // awal, maks, akselerasi
+function applyPreset() {
+  const n = 200 * +$('pMicro').value / +$('pMech').value;     // langkah/mm
+  const [s, v, a] = PROFILES[$('pSpeed').value];
+  $('spmm').value = +n.toFixed(2);
+  $('s').value = +(s / n).toFixed(2); $('v').value = +(v / n).toFixed(2); $('a').value = +(a / n).toFixed(1);
+  $('pInfo').textContent = `${+n.toFixed(2)} langkah/mm · maks ${v} langkah/s · awal ${s} langkah/s`;
+  if (writer) $('btnApply').onclick();
+}
+['pMicro', 'pMech', 'pSpeed'].forEach(id => $(id).onchange = applyPreset);
+applyPreset();
+
+// ------------------------------------------------------------------ SVG -> goresan (mm) -> streaming ke Pico
+let strokes = [], svgSize = { w:0, h:0 }, svgAbort = false, svgRunning = false, svgDone = 0;
+
+function svgToStrokes(text, widthMm, tolMm, optimize) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const root = doc.documentElement;
+  if (doc.querySelector('parsererror') || root.nodeName.toLowerCase() !== 'svg') throw new Error('Bukan file SVG yang valid');
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-99999px;top:0;width:1000px;height:1000px;visibility:hidden';
+  const svg = document.importNode(root, true);
+  if (svg.getAttribute('viewBox')) { svg.setAttribute('width', '1000'); svg.setAttribute('height', '1000'); }
+  host.appendChild(svg); document.body.appendChild(host);
+  const polys = [];
+  try {
+    const STEP = 0.5;
+    // jarak antar sampel yang jauh melebihi langkah = awal subpath baru (angkat pena)
+    const sample = (e, m) => {
+      const len = e.getTotalLength();
+      if (!(len > 0)) return [];
+      const k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+      const n = Math.max(2, Math.min(20000, Math.ceil(len * k / STEP)));
+      const gap = Math.max(STEP, len * k / n) * 2;
+      const out = []; let cur = [];
+      for (let i = 0; i <= n; i++) {
+        const p = e.getPointAtLength(len * i / n);
+        const q = { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
+        if (cur.length && Math.hypot(q.x - cur[cur.length - 1].x, q.y - cur[cur.length - 1].y) > gap) { out.push(cur); cur = []; }
+        cur.push(q);
+      }
+      out.push(cur);
+      return out;
+    };
+    const hidden = el => {
+      for (let n = el; n && n !== svg; n = n.parentNode)
+        if (n.getAttribute && (n.getAttribute('display') === 'none' || /display\s*:\s*none/.test(n.getAttribute('style') || ''))) return true;
+      return false;
+    };
+    for (const el of svg.querySelectorAll('path,line,polyline,polygon,rect,circle,ellipse')) {
+      if (el.closest('defs,clipPath,mask,symbol,pattern,marker') || hidden(el) || typeof el.getTotalLength !== 'function') continue;
+      const m = el.getCTM(); if (!m) continue;
+      for (const p of sample(el, m)) polys.push(p);
+    }
+  } finally { host.remove(); }
+  if (!polys.length) throw new Error('Tidak ada bentuk yang bisa digambar di SVG ini');
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of polys) for (const q of p) { minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x); minY = Math.min(minY, q.y); maxY = Math.max(maxY, q.y); }
+  const w = maxX - minX, h = maxY - minY, s = widthMm / (w > 0 ? w : h || 1);
+  const rdp = (pts, tol) => {
+    if (pts.length < 3) return pts;
+    const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+    const stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [a, b] = stack.pop(); let dm = 0, im = -1;
+      const A = pts[a], B = pts[b], dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy);
+      for (let i = a + 1; i < b; i++) {
+        const d = L ? Math.abs(dy * (pts[i].x - A.x) - dx * (pts[i].y - A.y)) / L : Math.hypot(pts[i].x - A.x, pts[i].y - A.y);
+        if (d > dm) { dm = d; im = i; }
+      }
+      if (dm > tol) { keep[im] = 1; stack.push([a, im], [im, b]); }
+    }
+    return pts.filter((_, i) => keep[i]);
+  };
+  let out = polys.map(p => rdp(p.map(q => ({ x: (q.x - minX) * s, y: (maxY - q.y) * s })), tolMm))
+    .filter(p => p.length >= 2 && p.some(q => Math.hypot(q.x - p[0].x, q.y - p[0].y) > 0.05));
+  if (optimize) {
+    const left = out.slice(), res = []; let cx = 0, cy = 0;
+    while (left.length) {
+      let bi = 0, br = false, bd = Infinity;
+      left.forEach((p, i) => {
+        const d1 = Math.hypot(p[0].x - cx, p[0].y - cy), d2 = Math.hypot(p[p.length - 1].x - cx, p[p.length - 1].y - cy);
+        if (d1 < bd) { bd = d1; bi = i; br = false; }
+        if (d2 < bd) { bd = d2; bi = i; br = true; }
+      });
+      let p = left.splice(bi, 1)[0]; if (br) p = p.slice().reverse();
+      res.push(p); cx = p[p.length - 1].x; cy = p[p.length - 1].y;
+    }
+    out = res;
+  }
+  return { strokes: out, w: w * s, h: h * s };
+}
+
+let svgText = '';
+function svgConvert() {
+  if (!svgText) return;
+  try {
+    const r = svgToStrokes(svgText, +$('svgW').value || 40, +$('svgTol').value || 0.1, $('svgOpt').checked);
+    strokes = r.strokes; svgSize = { w: r.w, h: r.h }; svgDone = 0;
+    const pts = strokes.reduce((n, p) => n + p.length, 0);
+    $('svgInfo').textContent = `${strokes.length} jalur · ${pts} titik · ${r.w.toFixed(1)} × ${r.h.toFixed(1)} mm`;
+    $('svgH').value = +r.h.toFixed(1);
+  } catch (e) { strokes = []; $('svgInfo').textContent = 'Gagal: ' + e.message; }
+  $('btnSvgRun').disabled = !writer || !strokes.length || svgRunning;
+  drawSvg();
+}
+function drawSvg() {
+  const c = $('svgView'), r = c.getBoundingClientRect(), d = devicePixelRatio || 1;
+  c.width = Math.max(1, r.width * d); c.height = Math.max(1, r.height * d);
+  const x = c.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0);
+  const aw = +$('areaW').value || 100, ah = +$('areaH').value || 100, ox = +$('svgOx').value || 0, oy = +$('svgOy').value || 0;
+  const W = Math.max(aw, ox + svgSize.w), H = Math.max(ah, oy + svgSize.h), pad = 12;
+  const sc = Math.min((r.width - 2 * pad) / W, (r.height - 2 * pad) / H);
+  const px = v => pad + v * sc, py = v => r.height - pad - v * sc;
+  x.strokeStyle = '#f5a62388'; x.setLineDash([5, 4]); x.strokeRect(px(0), py(ah), aw * sc, ah * sc); x.setLineDash([]);
+  strokes.forEach((p, i) => {
+    x.beginPath(); x.strokeStyle = i < svgDone ? '#3ecf8e' : '#e6e9ee'; x.lineWidth = 1.4;
+    p.forEach((q, k) => k ? x.lineTo(px(q.x + ox), py(q.y + oy)) : x.moveTo(px(q.x + ox), py(q.y + oy)));
+    x.stroke();
+  });
+  $('svgProg').style.width = (strokes.length ? 100 * svgDone / strokes.length : 0) + '%';
+}
+function loadSvgFile(f) { f.text().then(t => { svgText = t; svgConvert(); }); }
+$('btnSvg').onclick = () => $('svgFile').click();
+$('svgFile').onchange = e => { const f = e.target.files[0]; if (f) loadSvgFile(f); e.target.value = ''; };
+// resize: lebar, tinggi (proporsi tetap), skala % dari lebar sebelumnya, atau muat ke area kerja
+let svgBaseW = 40;
+$('svgW').onchange = () => { svgBaseW = +$('svgW').value || 40; $('svgS').value = 100; svgConvert(); };
+$('svgH').onchange = () => {
+  if (!svgSize.h) return;
+  $('svgW').value = +((+$('svgH').value || 1) * svgSize.w / svgSize.h).toFixed(2);
+  $('svgW').onchange();
+};
+$('svgS').onchange = () => {
+  const k = (+$('svgS').value || 100) / 100;
+  $('svgW').value = +(svgBaseW * k).toFixed(2); svgConvert();
+};
+$('btnSvgFit').onclick = () => {
+  if (!svgSize.w || !svgSize.h) return;
+  const aw = (+$('areaW').value || 100) - (+$('svgOx').value || 0), ah = (+$('areaH').value || 100) - (+$('svgOy').value || 0);
+  const k = Math.min(aw / svgSize.w, ah / svgSize.h);
+  if (k <= 0) return;
+  $('svgW').value = +(svgSize.w * k).toFixed(2);
+  $('svgW').onchange();
+};
+for (const id of ['svgTol', 'svgOpt']) $(id).onchange = svgConvert;
+for (const id of ['svgOx', 'svgOy', 'areaW', 'areaH']) $(id).addEventListener('input', drawSvg);
+$('btnSvgMid').onclick = () => {
+  $('svgOx').value = Math.max(0, +(((+$('areaW').value || 100) - svgSize.w) / 2).toFixed(1));
+  $('svgOy').value = Math.max(0, +(((+$('areaH').value || 100) - svgSize.h) / 2).toFixed(1));
+  drawSvg();
+};
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f && /\.svg$/i.test(f.name)) loadSvgFile(f); });
+new ResizeObserver(drawSvg).observe($('svgView'));
+
+// kirim satu perintah, tunggu "ok"; jika antrean Pico penuh ("full") ulangi sebentar lagi
+async function cmd(c) {
+  for (;;) {
+    if (svgAbort || !writer) return 'stopped';
+    const reply = await new Promise(res => { waiter = res; send(c, true); setTimeout(() => { if (waiter === res) { waiter = null; res('timeout'); } }, 3000); });
+    if (reply === 'full' || reply === 'busy' || reply === 'timeout') { await new Promise(r => setTimeout(r, 120)); continue; }
+    return reply;
+  }
+}
+$('btnSvgRun').onclick = async () => {
+  if (svgRunning || !strokes.length || !writer) return;
+  const ox = +$('svgOx').value || 0, oy = +$('svgOy').value || 0;
+  const aw = +$('areaW').value || 100, ah = +$('areaH').value || 100;
+  if (ox + svgSize.w > aw || oy + svgSize.h > ah) { if (!confirm(`Gambar (${(ox + svgSize.w).toFixed(1)} × ${(oy + svgSize.h).toFixed(1)} mm) melebihi area ${aw} × ${ah} mm. Tetap lanjut?`)) return; }
+  svgRunning = true; svgAbort = false; svgDone = 0; $('btnSvgRun').disabled = true;
+  log(`== Menggambar ${strokes.length} jalur ==`);
+  await cmd('DV ' + (+$('drawV').value || 0));
+  const f = v => (+v.toFixed(3)).toString();
+  outer: for (let i = 0; i < strokes.length; i++) {
+    const p = strokes[i];
+    const seq = ['PU', `MV ${f(p[0].x + ox)} ${f(p[0].y + oy)}`, 'PD', ...p.slice(1).map(q => `MV ${f(q.x + ox)} ${f(q.y + oy)}`), 'PU'];
+    for (const c of seq) { if ((await cmd(c)) !== 'ok') break outer; }
+    svgDone = i + 1; drawSvg();
+  }
+  if (!svgAbort) {                                  // tunggu antrean Pico benar-benar habis
+    stQ = 1; stBusy = true;
+    while (!svgAbort && writer && (stQ > 0 || stBusy)) { send('ST', true); await new Promise(r => setTimeout(r, 300)); }
+    if (!svgAbort) { log('== Selesai =='); await send('MV 0 0', true); }
+  } else log('== Dihentikan ==', 'er');
+  svgRunning = false; $('btnSvgRun').disabled = !writer || !strokes.length;
+};
+
+$('invA').onchange =() => send(`INVA ${$('invA').checked ? 1 : 0}`);
+$('invB').onchange = () => send(`INVB ${$('invB').checked ? 1 : 0}`);
+$('en').onchange = () => send(`EN ${$('en').checked ? 1 : 0}`);
+$('btnSend').onclick = () => { const v = $('cmd').value.trim(); if (v) { send(v); $('cmd').value = ''; } };
+$('cmd').onkeydown = e => { if (e.key === 'Enter') $('btnSend').click(); };
+$('btnClr').onclick = () => $('log').textContent = '';
+addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || !writer) return;
+  const d = { ArrowUp:'U', ArrowDown:'D', ArrowLeft:'L', ArrowRight:'R' }[e.key];
+  if (d) { e.preventDefault(); send(`${d} ${$('step').value}`); }
+  else if (e.key === ' ') { e.preventDefault(); send('STOP'); }
+});
+
+if (!('serial' in navigator)) $('warn').style.display = 'block';
+setConnected(false);
+</script>
+</body>
+</html>
