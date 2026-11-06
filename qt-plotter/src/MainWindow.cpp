@@ -29,6 +29,7 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QDateTime>
+#include <QStandardPaths>
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -851,7 +852,10 @@ void MainWindow::saveCalibrationRecord(double w, double h) {
     QJsonObject cfg;
     for (auto it = cfg_.constBegin(); it != cfg_.constEnd(); ++it) cfg[it.key()] = it.value();
     o["setelan_esp32"] = cfg;
-    const QString path = QCoreApplication::applicationDirPath() + "/calibration_data.jsonl";
+    // folder data pengguna (tetap ada walau exe dijalankan dari paket 1 file): %APPDATA%/EmbeddedPlotter/QtPlotter
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    const QString path = dir + "/calibration_data.jsonl";
     QFile f(path);
     if (f.open(QIODevice::Append | QIODevice::Text)) {
         f.write(QJsonDocument(o).toJson(QJsonDocument::Compact) + "\n");

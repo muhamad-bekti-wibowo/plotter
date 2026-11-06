@@ -24,3 +24,9 @@ python -m esptool --chip esp32 -p COMx -b 460800 write_flash 0x0 release/esp-plo
 
 Atau pakai Flash Download Tool Espressif / https://espressif.github.io/esp-launchpad/ (custom bin, alamat 0x0). Setelah itu buka serial 115200 dan ketik `HELP`.
 Setelan (NVS) dan file job (SPIFFS) dibuat otomatis saat pertama boot.
+
+## Aplikasi siap pakai (1 file exe)
+`release/QtPlotter.exe` — Windows 10/11 64-bit, tinggal klik dua kali (tidak perlu instal Qt atau Visual C++).
+Saat pertama dijalankan, exe mengekstrak dirinya sekali ke `%LOCALAPPDATA%\EmbeddedPlotter\`, lalu membuka aplikasi. Peluncuran berikutnya langsung terbuka.
+Data kalibrasi manual disimpan di `%APPDATA%\EmbeddedPlotter\QtPlotter\calibration_data.jsonl`.
+Untuk menghapus: hapus folder `%LOCALAPPDATA%\EmbeddedPlotter`.
