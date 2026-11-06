@@ -68,3 +68,5 @@ void settings_reset_defaults(bool erase_nvs);
 
 void wifi_cred_load(char* ssid, size_t sl, char* pass, size_t pl);
 void wifi_cred_save(const char* ssid, const char* pass);
+void ap_cred_load(char* ssid, size_t sl, char* pass, size_t pl);   // kosong = bawaan (Plotter-XXXX / plotter123)
+void ap_cred_save(const char* ssid, const char* pass);

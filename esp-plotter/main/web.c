@@ -3,6 +3,7 @@
 #include <string.h>
 #include "esp_http_server.h"
 #include "cmd.h"
+#include "net.h"
 #include "motion.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
@@ -103,6 +104,42 @@ static esp_err_t h_ota(httpd_req_t* r) {
   return ESP_OK;
 }
 
+// GET /wifi : status (tanpa password). POST /wifi : badan 4 baris = SSID STA, password STA, SSID AP, password AP
+// (password kosong = tidak diubah; SSID STA kosong = hapus STA, ESP32 jadi AP saja; SSID AP kosong = tidak diubah)
+static esp_err_t h_wifi_get(httpd_req_t* r) {
+  char b[200];
+  net_wifi_get(b, sizeof b);
+  httpd_resp_set_type(r, "text/plain; charset=utf-8");
+  return httpd_resp_sendstr(r, b);
+}
+
+static esp_err_t h_wifi_set(httpd_req_t* r) {
+  if (r->content_len == 0 || r->content_len > 400) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, "badan 1..400 byte");
+  char body[420];
+  int got = 0;
+  while (got < (int)r->content_len) {
+    int n = httpd_req_recv(r, body + got, r->content_len - got);
+    if (n <= 0) return ESP_FAIL;
+    got += n;
+  }
+  body[got] = 0;
+  char* f[4] = {"", "", "", ""};
+  char* p = body;
+  for (int i = 0; i < 4 && p; i++) {
+    f[i] = p;
+    char* e = strchr(p, '\n');
+    if (e) { *e = 0; p = e + 1; } else p = NULL;
+    size_t l = strlen(f[i]);
+    if (l && f[i][l - 1] == '\r') f[i][l - 1] = 0;
+  }
+  const char* err = net_set_wifi(f[0], f[1], f[2], f[3], false);
+  if (err) return httpd_resp_send_err(r, HTTPD_400_BAD_REQUEST, err);
+  httpd_resp_sendstr(r, "ok tersimpan, WiFi dihubungkan ulang");
+  vTaskDelay(pdMS_TO_TICKS(400));                                   // beri waktu balasan terkirim sebelum WiFi berubah
+  net_set_wifi(f[0], f[1], f[2], f[3], true);
+  return ESP_OK;
+}
+
 void web_start(void) {
   httpd_config_t c = HTTPD_DEFAULT_CONFIG();
   c.stack_size = 8192;
@@ -116,5 +153,9 @@ void web_start(void) {
   httpd_register_uri_handler(h, &u2);
   httpd_uri_t u4 = {.uri = "/ota", .method = HTTP_POST, .handler = h_ota};
   httpd_register_uri_handler(h, &u3);
+  httpd_uri_t u5 = {.uri = "/wifi", .method = HTTP_GET, .handler = h_wifi_get};
+  httpd_uri_t u6 = {.uri = "/wifi", .method = HTTP_POST, .handler = h_wifi_set};
   httpd_register_uri_handler(h, &u4);
+  httpd_register_uri_handler(h, &u5);
+  httpd_register_uri_handler(h, &u6);
 }

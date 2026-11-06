@@ -21,6 +21,7 @@ static EventGroupHandle_t wev;
 static TimerHandle_t retry_tmr;
 static esp_netif_t *sta_if, *ap_if;
 static char sta_ssid[40], sta_pass[70];
+static char ap_ssid[40], ap_pass[70];     // kosong = bawaan
 static char ip_str[16] = "-";
 static int fail_count;
 static bool ap_on;
@@ -38,7 +39,7 @@ static void start_ap(void) {
   esp_wifi_set_mode(sta_ssid[0] ? WIFI_MODE_APSTA : WIFI_MODE_AP);
   esp_wifi_set_config(WIFI_IF_AP, &ac);
   ap_on = true;
-  io_log("wifi AP aktif: SSID=%s pass=plotter123 IP=192.168.4.1", ac.ap.ssid);
+  io_log("wifi AP aktif: SSID=%s IP=192.168.4.1%s", ac.ap.ssid, ap_pass[0] ? "" : " pass=plotter123");
 }
 
 static void sta_connect(void) {
@@ -56,7 +57,7 @@ static void on_wifi(void* arg, esp_event_base_t base, int32_t id, void* data) {
     xEventGroupClearBits(wev, EV_STA_UP);
     strcpy(ip_str, "-");
     if (!sta_ssid[0]) return;
-    if (++fail_count == 6 && !ap_on) start_ap();                     // cadangan: AP supaya tetap bisa dikonfigurasi
+    if (++fail_count >= 3 && !ap_on) start_ap();                     // STA tidak ada/gagal ~20 dtk: nyalakan AP supaya tetap bisa dikonfigurasi
     xTimerStart(retry_tmr, 0);                                      // timer FreeRTOS: coba lagi tiap 10 detik
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t* e = (ip_event_got_ip_t*)data;
@@ -64,6 +65,11 @@ static void on_wifi(void* arg, esp_event_base_t base, int32_t id, void* data) {
     fail_count = 0;
     xEventGroupSetBits(wev, EV_STA_UP);
     io_log("wifi ip %s tcp=%d http=80", ip_str, TCP_PORT);
+    if (ap_on) {                                                      // STA tersambung: AP cadangan tidak diperlukan lagi
+      esp_wifi_set_mode(WIFI_MODE_STA);
+      ap_on = false;
+      io_log("wifi AP dimatikan, pakai STA");
+    }
   }
 }
 
@@ -79,6 +85,32 @@ void net_wifi_reconfigure(void) {
     esp_wifi_set_mode(ap_on ? WIFI_MODE_APSTA : WIFI_MODE_STA);
     sta_connect();
   } else start_ap();
+}
+
+// Ganti WiFi dari web/perintah. Kolom password AP/STA kosong = tidak diubah (STA: kecuali SSID baru = jaringan terbuka).
+// commit=false hanya memeriksa. Mengembalikan NULL jika sukses, selain itu pesan kesalahan.
+const char* net_set_wifi(const char* ss, const char* sp, const char* as, const char* ap, bool commit) {
+  if (strlen(ss) > 32 || strlen(sp) > 63 || strlen(as) > 32 || strlen(ap) > 63) return "SSID maks 32 dan password maks 63 karakter";
+  if (sp[0] && strlen(sp) < 8) return "password STA minimal 8 karakter (kosong = jaringan terbuka)";
+  if (ap[0] && strlen(ap) < 8) return "password AP minimal 8 karakter";
+  if (!commit) return NULL;
+  if (!sp[0] && ss[0] && !strcmp(ss, sta_ssid)) sp = sta_pass;
+  wifi_cred_save(ss, sp);
+  if (as[0]) strlcpy(ap_ssid, as, sizeof ap_ssid);
+  if (ap[0]) strlcpy(ap_pass, ap, sizeof ap_pass);
+  ap_cred_save(ap_ssid, ap_pass);
+  if (ap_on) start_ap();                                            // terapkan SSID/password AP baru
+  net_wifi_reconfigure();
+  return NULL;
+}
+
+void net_wifi_get(char* buf, size_t n) {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+  char apn[40];
+  if (ap_ssid[0]) strlcpy(apn, ap_ssid, sizeof apn);
+  else snprintf(apn, sizeof apn, "Plotter-%02X%02X", mac[4], mac[5]);
+  snprintf(buf, n, "sta_ssid=%s\nap_ssid=%s\nap_on=%d\nsta_up=%d\nip=%s\n", sta_ssid, apn, ap_on, net_sta_connected(), ip_str);
 }
 
 bool net_sta_connected(void) { return wev && (xEventGroupGetBits(wev) & EV_STA_UP); }

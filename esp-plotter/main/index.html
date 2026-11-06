@@ -22,6 +22,16 @@ Langkah <input id=step type=number value=10 style="width:70px"> mm
 <fieldset><legend>Setelan (NVS)</legend><button onclick="load()">Muat</button><button onclick="c('SAVE')">SAVE ke flash</button>
 <button onclick="c('APPLY')">APPLY pin</button><button class=r onclick="if(confirm('Reset ke bawaan?'))c('CLEAR')">CLEAR</button>
 <table id=set></table></fieldset>
+<fieldset><legend>WiFi</legend><div id=wst style="margin-bottom:6px">-</div>
+<table><tr><td colspan=2><b>STA</b> (sambung ke router)</td></tr>
+<tr><td>SSID</td><td><input id=ws style="width:95%" maxlength=32></td></tr>
+<tr><td>Password</td><td><input id=wp type=password style="width:95%" maxlength=63 placeholder="kosong = tidak diubah"></td></tr>
+<tr><td colspan=2><b>AP</b> (hotspot cadangan, nyala bila STA tidak ada)</td></tr>
+<tr><td>SSID</td><td><input id=as style="width:95%" maxlength=32></td></tr>
+<tr><td>Password</td><td><input id=ap type=password style="width:95%" maxlength=63 placeholder="min 8 karakter, kosong = tidak diubah"></td></tr></table>
+<button onclick="wsave()">Simpan &amp; terapkan</button><button class=g onclick="wload()">Muat</button>
+<button class=r onclick="$('ws').value='';wsave()">Hapus STA (AP saja)</button>
+<div style="font-size:12px;color:#aaa;margin-top:4px">Setelah disimpan, sambungan ke AP bisa putus. Cari IP baru lewat router atau sambung ulang ke AP.</div></fieldset>
 <fieldset><legend>File di flash</legend><input type=file id=f><button onclick="up()">Unggah</button><button onclick="ls()">Daftar</button>
 <table id=files></table></fieldset>
 <script>
@@ -37,5 +47,10 @@ async function ls(){const x=await c('LS');const t=$('files');t.innerHTML='';
   tr.innerHTML='<td>'+p[1]+'</td><td>'+p[2]+' B</td><td><button onclick="c(\'RUN '+p[1]+'\')">Jalankan</button><button class=r onclick="c(\'DEL '+p[1]+'\').then(ls)">Hapus</button></td>'})}
 async function up(){const f=$('f').files[0];if(!f)return;await fetch('/upload?name='+encodeURIComponent(f.name),{method:'POST',body:await f.arrayBuffer()});ls()}
 setInterval(async()=>{try{const x=await(await fetch('/cmd',{method:'POST',body:'ST'})).text();$('st').textContent=x.split('\n')[0]}catch(e){$('st').textContent='terputus'}},1500);
-load();ls();
+async function wload(){try{const t=await(await fetch('/wifi')).text();const o={};t.split('\n').forEach(l=>{const i=l.indexOf('=');if(i>0)o[l.slice(0,i)]=l.slice(i+1)});
+ $('ws').value=o.sta_ssid||'';$('as').value=o.ap_ssid||'';
+ $('wst').textContent='STA: '+(o.sta_ssid?(o.sta_up=='1'?'tersambung, IP '+o.ip:'belum tersambung'):'tidak diatur')+' | AP: '+(o.ap_on=='1'?'menyala':'mati')}catch(e){}}
+async function wsave(){const r=await fetch('/wifi',{method:'POST',body:[$('ws').value,$('wp').value,$('as').value,$('ap').value].join('\n')});
+ alert(await r.text());$('wp').value='';$('ap').value='';setTimeout(wload,3000)}
+load();ls();wload();
 </script></body></html>

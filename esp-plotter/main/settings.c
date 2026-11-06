@@ -95,3 +95,23 @@ void wifi_cred_save(const char* ssid, const char* pass) {
   nvs_commit(h);
   nvs_close(h);
 }
+
+void ap_cred_load(char* ssid, size_t sl, char* pass, size_t pl) {
+  ssid[0] = pass[0] = 0;
+  nvs_handle_t h;
+  if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK) return;
+  size_t n = sl;
+  if (nvs_get_str(h, "apssid", ssid, &n) != ESP_OK) ssid[0] = 0;
+  n = pl;
+  if (nvs_get_str(h, "appass", pass, &n) != ESP_OK) pass[0] = 0;
+  nvs_close(h);
+}
+
+void ap_cred_save(const char* ssid, const char* pass) {
+  nvs_handle_t h;
+  if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_str(h, "apssid", ssid);
+  nvs_set_str(h, "appass", pass);
+  nvs_commit(h);
+  nvs_close(h);
+}
