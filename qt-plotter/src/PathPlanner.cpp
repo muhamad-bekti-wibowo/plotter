@@ -22,7 +22,7 @@ PlanResult planPaths(const Paths& src, const PlanOptions& o) {
     if (src.isEmpty() || (b.width() <= 0 && b.height() <= 0)) return r;
     double availW = std::max(1.0, o.areaW - 2 * o.margin), availH = std::max(1.0, o.areaH - 2 * o.margin);
     double sx = b.width() > 0 ? availW / b.width() : 1e9, sy = b.height() > 0 ? availH / b.height() : 1e9;
-    double s = std::min(sx, sy) * o.scalePct / 100.0;
+    double s = o.keepSize ? o.scalePct / 100.0 : std::min(sx, sy) * o.scalePct / 100.0;
     double cx = b.center().x(), cy = b.center().y();
     double mx = o.areaW / 2 + o.offsetX, my = o.areaH / 2 + o.offsetY;
 

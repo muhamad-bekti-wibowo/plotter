@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="/fonts">
+    <file>futural.jhf</file>
+    <file>futuram.jhf</file>
+    <file>rowmans.jhf</file>
+    <file>timesr.jhf</file>
+    <file>timesrb.jhf</file>
+    <file>scripts.jhf</file>
+    <file>cursive.jhf</file>
+    <file>gothiceng.jhf</file>
+  </qresource>
+</RCC>

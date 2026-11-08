@@ -9,6 +9,8 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include "GcodeImport.h"
+#include "TextRender.h"
+#include <QFontComboBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -69,6 +71,7 @@ MainWindow::MainWindow() {
 
     auto* tabs = new QTabWidget;
     tabs->addTab(buildJobTab(), "Gambar / Plot");
+    tabs->addTab(buildTextTab(), "Teks");
     tabs->addTab(buildCalibTab(), "Kalibrasi");
     tabs->addTab(buildSettingsTab(), "Setelan");
     tabs->addTab(buildFlashTab(), "Flash");
@@ -116,6 +119,8 @@ MainWindow::MainWindow() {
         plotBtn_->setEnabled(true);
         statusBar()->showMessage(ok ? "Selesai: " + msg : "Berhenti: " + msg, 8000);
         if (!pendingUpload_.isEmpty()) { pendingUpload_.clear(); refreshFiles(); }
+        if (counterPending_ && ok && counter_) counter_->setValue(counter_->value() + 1);   // penomoran otomatis ({n})
+        counterPending_ = false;
     });
     connect(link_, &PlotterLink::limits, this, [this](bool xl, bool yb, bool xr, bool yt) {
         if (!limLbl_) return;
@@ -298,6 +303,148 @@ QWidget* MainWindow::buildJobTab() {
     v->addWidget(ug);
     v->addStretch();
     return w;
+}
+
+QWidget* MainWindow::buildTextTab() {
+    auto* w = new QWidget;
+    auto* v = new QVBoxLayout(w);
+    textTimer_ = new QTimer(this);
+    textTimer_->setSingleShot(true);
+    textTimer_->setInterval(200);
+    connect(textTimer_, &QTimer::timeout, this, &MainWindow::applyText);
+    auto changed = [this] { textTimer_->start(); };
+
+    auto* hint = new QLabel("Ketik teks (boleh beberapa baris). Variabel: {n} {n:4} nomor, {tanggal}, {jam}");
+    hint->setWordWrap(true);
+    v->addWidget(hint);
+    textEdit_ = new QPlainTextEdit;
+    textEdit_->setPlainText("Halo");
+    textEdit_->setMaximumHeight(90);
+    connect(textEdit_, &QPlainTextEdit::textChanged, this, changed);
+    v->addWidget(textEdit_);
+
+    auto* fg = new QGroupBox("Huruf");
+    auto* ff = new QFormLayout(fg);
+    textKind_ = new QComboBox;
+    textKind_->addItems({"Satu goresan (cocok untuk pena)", "Font Windows (kontur, bisa diarsir)"});
+    strokeFont_ = new QComboBox;
+    for (const auto& i : strokeFonts()) strokeFont_->addItem(i.label, i.id);
+    sysFont_ = new QFontComboBox;
+    sysFont_->setCurrentFont(QFont("Arial"));
+    textBold_ = new QCheckBox("Tebal");
+    textItalic_ = new QCheckBox("Miring");
+    auto* st = new QHBoxLayout;
+    st->addWidget(textBold_);
+    st->addWidget(textItalic_);
+    passes_ = new QSpinBox;
+    passes_->setRange(1, 3);
+    passes_->setToolTip("Gambar huruf 1-3 kali bergeser sedikit supaya garis lebih tebal (font satu goresan)");
+    penW_ = dspin(0.1, 2, 0.4, 0.1, 1);
+    ff->addRow("Jenis", textKind_);
+    ff->addRow("Font goresan", strokeFont_);
+    ff->addRow("Font Windows", sysFont_);
+    ff->addRow(st);
+    ff->addRow("Lintasan (tebal)", passes_);
+    ff->addRow("Geser lintasan (mm)", penW_);
+    v->addWidget(fg);
+
+    auto* ag = new QGroupBox("Ukuran dan tata letak");
+    auto* af = new QFormLayout(ag);
+    textH_ = dspin(1, 500, 10, 1, 1);
+    textLs_ = dspin(-5, 50, 0, 0.5, 1);
+    textLine_ = dspin(0.8, 4, 1.5, 0.1, 2);
+    textAlign_ = new QComboBox;
+    textAlign_->addItems({"Kiri", "Tengah", "Kanan"});
+    textRot_ = dspin(-360, 360, 0, 5, 1);
+    af->addRow("Tinggi huruf kapital (mm)", textH_);
+    af->addRow("Jarak antar huruf (mm)", textLs_);
+    af->addRow("Jarak antar baris (x tinggi)", textLine_);
+    af->addRow("Rata", textAlign_);
+    af->addRow("Putar (derajat, + = lawan jarum jam)", textRot_);
+    v->addWidget(ag);
+
+    auto* hg = new QGroupBox("Isi huruf (font Windows)");
+    auto* hf = new QFormLayout(hg);
+    hatch_ = new QCheckBox("Isi dengan arsiran");
+    hatchSp_ = dspin(0.2, 5, 0.6, 0.1, 2);
+    hatchAng_ = dspin(0, 180, 45, 5, 0);
+    hf->addRow(hatch_);
+    hf->addRow("Jarak arsiran (mm)", hatchSp_);
+    hf->addRow("Sudut arsiran", hatchAng_);
+    v->addWidget(hg);
+
+    auto* ng = new QGroupBox("Penomoran otomatis");
+    auto* nf = new QFormLayout(ng);
+    counter_ = new QSpinBox;
+    counter_->setRange(0, 999999);
+    counter_->setValue(1);
+    autoInc_ = new QCheckBox("Naikkan nomor setelah plot selesai");
+    nf->addRow("Nomor {n} sekarang", counter_);
+    nf->addRow(autoInc_);
+    v->addWidget(ng);
+
+    for (auto* s : {textH_, textLs_, textLine_, textRot_, hatchSp_, hatchAng_, penW_}) connect(s, &QDoubleSpinBox::valueChanged, this, changed);
+    for (auto* s : {passes_, counter_}) connect(s, &QSpinBox::valueChanged, this, changed);
+    for (auto* c : {textBold_, textItalic_, hatch_}) connect(c, &QCheckBox::toggled, this, changed);
+    for (auto* c : {textKind_, strokeFont_, textAlign_}) connect(c, &QComboBox::currentIndexChanged, this, changed);
+    connect(sysFont_, &QFontComboBox::currentFontChanged, this, changed);
+
+    textInfo_ = new QLabel("Penempatan (margin, geser, mirror) ada di tab Gambar / Plot.");
+    textInfo_->setWordWrap(true);
+    v->addWidget(textInfo_);
+    auto* h = new QHBoxLayout;
+    auto* show = new QPushButton("Tampilkan di kanvas");
+    auto* go = new QPushButton("Plot teks");
+    go->setStyleSheet("font-weight:bold;padding:8px");
+    connect(show, &QPushButton::clicked, this, &MainWindow::applyText);
+    connect(go, &QPushButton::clicked, this, [this] { applyText(); plot(); counterPending_ = autoInc_->isChecked() && link_->jobActive(); });
+    h->addWidget(show);
+    h->addWidget(go);
+    v->addLayout(h);
+    v->addStretch();
+    return w;
+}
+
+void MainWindow::applyText() {
+    TextOptions o;
+    o.text = expandTextVars(textEdit_->toPlainText(), counter_->value(), QDateTime::currentDateTime());
+    o.singleStroke = textKind_->currentIndex() == 0;
+    o.strokeFont = strokeFont_->currentData().toString();
+    o.family = sysFont_->currentFont().family();
+    o.bold = textBold_->isChecked();
+    o.italic = textItalic_->isChecked();
+    o.strokePasses = passes_->value();
+    o.penWidth = penW_->value();
+    o.height = textH_->value();
+    o.letterSpacing = textLs_->value();
+    o.lineSpacing = textLine_->value();
+    o.align = textAlign_->currentIndex();
+    o.rotation = textRot_->value();
+    o.hatch = hatch_->isChecked();
+    o.hatchSpacing = hatchSp_->value();
+    o.hatchAngle = hatchAng_->value();
+    strokeFont_->setEnabled(o.singleStroke);
+    passes_->setEnabled(o.singleStroke);
+    penW_->setEnabled(o.singleStroke);
+    sysFont_->setEnabled(!o.singleStroke);
+    textBold_->setEnabled(!o.singleStroke);
+    textItalic_->setEnabled(!o.singleStroke);
+    hatch_->setEnabled(!o.singleStroke);
+    hatchSp_->setEnabled(!o.singleStroke);
+    hatchAng_->setEnabled(!o.singleStroke);
+    QString err;
+    const Paths p = renderText(o, &err);
+    fromRaster_ = false;
+    raster_ = QImage();
+    if (p.isEmpty()) {
+        src_.clear();
+        srcBounds_ = QRectF();
+        keepSize_ = false;
+        replan();
+        textInfo_->setText(err.isEmpty() ? "Teks kosong." : err);
+        return;
+    }
+    applySource(p, QString("Teks: %1").arg(o.text.left(40).replace('\n', ' ')), true);
 }
 
 QWidget* MainWindow::buildSettingsTab() {
@@ -505,7 +652,8 @@ void MainWindow::retrace() {
     applySource(p, QString("Raster %1x%2 px → %3 kontur").arg(raster_.width()).arg(raster_.height()).arg(p.size()));
 }
 
-void MainWindow::applySource(const Paths& p, const QString& info) {
+void MainWindow::applySource(const Paths& p, const QString& info, bool keepSize) {
+    keepSize_ = keepSize;
     src_ = p;
     srcBounds_ = boundsOf(p);
     srcInfo_->setText(info + QString("\n%1 jalur, ukuran sumber %2 x %3").arg(p.size()).arg(srcBounds_.width(), 0, 'f', 1).arg(srcBounds_.height(), 0, 'f', 1));
@@ -525,6 +673,7 @@ void MainWindow::replan() {
     o.mirrorX = mirrorX_ && mirrorX_->isChecked();
     o.mirrorY = mirrorY_ && mirrorY_->isChecked();
     o.optimize = optimize_->isChecked();
+    o.keepSize = keepSize_;
     plan_ = planPaths(src_, o);
     const double dv = drawV_ ? drawV_->value() : 15.0, tv = travelV_ ? travelV_->value() : 60.0;
     canvas_->setPaths(plan_.paths);
@@ -533,6 +682,15 @@ void MainWindow::replan() {
                                                    .arg(plan_.paths.size()).arg(plan_.points).arg(plan_.drawLength, 0, 'f', 0)
                                                    .arg(plan_.travelLength, 0, 'f', 0)
                                                    .arg(plan_.drawLength / dv / 60 + plan_.travelLength / tv / 60, 0, 'f', 1).arg(dv, 0, 'f', 0));
+
+    if (keepSize_ && !plan_.paths.isEmpty()) {
+        const double sc = scale_->value() / 100.0;
+        const bool tooBig = srcBounds_.width() * sc > areaW_->value() - 2 * margin_->value() + 0.01 || srcBounds_.height() * sc > areaH_->value() - 2 * margin_->value() + 0.01;
+        const QString t = QString("Ukuran teks %1 x %2 mm").arg(srcBounds_.width() * sc, 0, 'f', 1).arg(srcBounds_.height() * sc, 0, 'f', 1) +
+                          (tooBig ? " - MELEBIHI area kerja, bagian tepi terpotong. Kecilkan huruf." : "");
+        planInfo_->setText(planInfo_->text() + "\n" + t);
+        if (textInfo_) textInfo_->setText(t);
+    } else if (textInfo_) textInfo_->setText(planInfo_->text());
 }
 
 QStringList MainWindow::jobCommands() const { return toCommands(plan_); }

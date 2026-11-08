@@ -19,6 +19,7 @@ class QSlider;
 class QSpinBox;
 class QTableWidget;
 class QTimer;
+class QFontComboBox;
 class QListWidget;
 
 class MainWindow : public QMainWindow {
@@ -45,12 +46,14 @@ private:
     QWidget* buildTerminalTab();
     QWidget* buildFlashTab();
     QWidget* buildCalibTab();
+    QWidget* buildTextTab();
+    void applyText();
     QWidget* saveBar();
     void syncCalib();
     void saveCalibrationRecord(double w, double h);   // tulis data kalibrasi manual ke calibration_data.jsonl
     double cfg(const QString& k, double def = 0) const { return cfg_.value(k, def); }
     void retrace();
-    void applySource(const Paths& p, const QString& info);
+    void applySource(const Paths& p, const QString& info, bool keepSize = false);
     void onReply(const QString& cmd, const QStringList& data, const QString& status);
     void jog(const QString& dir);
     QStringList jobCommands() const;
@@ -97,6 +100,16 @@ private:
     bool edgeSet_[4] = {false, false, false, false};
     QLabel *edgeLbl_[4] = {nullptr, nullptr, nullptr, nullptr}, *posLbl_ = nullptr, *manInfo_ = nullptr;
     QMap<QString, double> cfg_;
+    // teks
+    QPlainTextEdit* textEdit_ = nullptr;
+    QComboBox *textKind_ = nullptr, *strokeFont_ = nullptr, *textAlign_ = nullptr;
+    QFontComboBox* sysFont_ = nullptr;
+    QCheckBox *textBold_ = nullptr, *textItalic_ = nullptr, *hatch_ = nullptr, *autoInc_ = nullptr;
+    QSpinBox *passes_ = nullptr, *counter_ = nullptr;
+    QDoubleSpinBox *textH_ = nullptr, *textLs_ = nullptr, *textLine_ = nullptr, *textRot_ = nullptr, *hatchSp_ = nullptr, *hatchAng_ = nullptr, *penW_ = nullptr;
+    QLabel* textInfo_ = nullptr;
+    QTimer* textTimer_ = nullptr;
+    bool keepSize_ = false, counterPending_ = false;
     // flash
     QListWidget* files_;
     QLabel* fsInfo_;

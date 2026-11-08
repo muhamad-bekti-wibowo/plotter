@@ -7,6 +7,7 @@
 #include "../src/GcodeImport.h"
 #include "../src/ImageTracer.h"
 #include "../src/PathPlanner.h"
+#include "../src/TextRender.h"
 #include "../src/SvgImport.h"
 
 static int fails = 0;
@@ -86,6 +87,40 @@ int main(int argc, char** argv) {
     CHECK(g2.paths.size() == 2);
     GcodeResult g3 = parseGcode("G20\nG0 X0 Y0\nM3\nG1 X1 Y0\nM5\n");
     CHECK(g3.paths.size() == 1 && std::abs(g3.draw - 25.4) < 0.01);
+
+    // Teks satu goresan: ukuran, baris ganda, rata, putar, variabel
+    TextOptions to;
+    to.text = "HELLO";
+    to.height = 10;
+    QString terr;
+    Paths tp = renderText(to, &terr);
+    CHECK(terr.isEmpty() && !tp.isEmpty());
+    QRectF tbx = boundsOf(tp);
+    CHECK(tbx.height() > 8.5 && tbx.height() < 10.6);                 // tinggi kapital ~10 mm
+    CHECK(tbx.width() > 25 && tbx.width() < 60);
+    to.text = "AB\nAB";
+    Paths t2 = renderText(to);
+    CHECK(boundsOf(t2).height() > 20);                              // dua baris
+    to.text = "WWWW\nI";
+    to.align = 2;
+    Paths t3 = renderText(to);
+    {
+        double right = boundsOf(t3).right(), minXLine2 = 1e9;
+        for (const Polyline& pl : t3) if (pl.first().y() > 12) for (const QPointF& pt : pl) minXLine2 = std::min(minXLine2, pt.x());
+        CHECK(minXLine2 > right - 8);                                  // baris pendek menempel di kanan
+    }
+    to.align = 0;
+    to.text = "I";
+    to.rotation = 90;
+    QRectF rb = boundsOf(renderText(to));
+    CHECK(rb.width() > 8 && rb.height() < 4);                       // 'I' diputar 90 derajat jadi mendatar
+    to.rotation = 0;
+    to.strokePasses = 2;
+    TextOptions one = to;
+    one.strokePasses = 1;
+    CHECK(renderText(to).size() == 2 * renderText(one).size());
+    CHECK(expandTextVars("No {n:4} {n} {tanggal}", 7, QDateTime(QDate(2026, 11, 8), QTime(9, 5))) == "No 0007 7 2026-11-08");
+    for (const auto& fi : strokeFonts()) { to.strokeFont = fi.id; to.strokePasses = 1; to.text = "Aa1"; CHECK(!renderText(to).isEmpty()); }
 
     std::printf(fails ? "\n%d GAGAL\n" : "\nSEMUA OK\n", fails);
     return fails ? 1 : 0;

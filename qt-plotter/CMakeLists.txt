@@ -3,6 +3,7 @@ project(QtPlotter LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 find_package(Qt6 QUIET OPTIONAL_COMPONENTS SerialPort)   # tanpa SerialPort: Windows memakai fallback Win32 API
@@ -12,6 +13,7 @@ qt_add_executable(QtPlotter WIN32
     src/Transport.cpp src/Transport.h
     src/PlotterLink.cpp src/PlotterLink.h
     src/SvgImport.cpp src/SvgImport.h src/GcodeImport.cpp src/GcodeImport.h
+    src/TextRender.cpp src/TextRender.h fonts/fonts.qrc
     src/ImageTracer.cpp src/ImageTracer.h
     src/PathPlanner.cpp src/PathPlanner.h
     src/CanvasView.cpp src/CanvasView.h
@@ -24,6 +26,10 @@ if(TARGET Qt6::SerialPort)
 endif()
 
 # Uji logika tanpa hardware: cmake --build build --target selftest && build\selftest.exe
-qt_add_executable(selftest tests/selftest.cpp src/GcodeImport.cpp src/SvgImport.cpp src/ImageTracer.cpp src/PathPlanner.cpp)
+qt_add_executable(selftest tests/selftest.cpp src/TextRender.cpp fonts/fonts.qrc src/GcodeImport.cpp src/SvgImport.cpp src/ImageTracer.cpp src/PathPlanner.cpp)
 target_link_libraries(selftest PRIVATE Qt6::Gui)
 target_compile_definitions(selftest PRIVATE _USE_MATH_DEFINES)
+
+qt_add_executable(texttest tests/texttest.cpp fonts/fonts.qrc src/TextRender.cpp src/PathPlanner.cpp)
+target_link_libraries(texttest PRIVATE Qt6::Gui)
+target_compile_definitions(texttest PRIVATE _USE_MATH_DEFINES)

@@ -9,6 +9,7 @@ struct PlanOptions {
     double margin = 5;                 // mm
     double scalePct = 100;             // 100 = pas di area (dikurangi margin)
     double offsetX = 0, offsetY = 0;   // geser (mm) dari posisi tengah
+    bool keepSize = false;             // true: ukuran sumber (mm) dipertahankan x skala% (untuk teks), bukan dipaskan ke area
     bool flipY = true;                 // SVG y ke bawah -> plotter y ke atas (konversi standar)
     bool mirrorX = false;              // cermin kiri<->kanan
     bool mirrorY = false;              // cermin atas<->bawah (tambahan di atas flipY)
