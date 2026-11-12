@@ -69,6 +69,39 @@ MainWindow::MainWindow() {
     lv->addStretch();
     left->setMaximumWidth(280);
 
+    // pratinjau: grid skala (cm) bisa dimatikan
+    auto* mid = new QWidget;
+    auto* mv = new QVBoxLayout(mid);
+    mv->setContentsMargins(0, 0, 0, 0);
+    auto* gbar = new QHBoxLayout;
+    auto* gridOn = new QCheckBox("Grid");
+    auto* gridStep = new QDoubleSpinBox;
+    gridStep->setRange(0.5, 50);
+    gridStep->setDecimals(1);
+    gridStep->setSingleStep(0.5);
+    gridStep->setSuffix(" cm");
+    {
+        QSettings st;
+        gridOn->setChecked(st.value("gridOn", true).toBool());
+        gridStep->setValue(st.value("gridCm", 1.0).toDouble());
+    }
+    auto applyGrid = [this, gridOn, gridStep] {
+        canvas_->setGrid(gridOn->isChecked(), gridStep->value());
+        gridStep->setEnabled(gridOn->isChecked());
+        QSettings st;
+        st.setValue("gridOn", gridOn->isChecked());
+        st.setValue("gridCm", gridStep->value());
+    };
+    connect(gridOn, &QCheckBox::toggled, this, applyGrid);
+    connect(gridStep, &QDoubleSpinBox::valueChanged, this, applyGrid);
+    applyGrid();
+    gbar->addWidget(gridOn);
+    gbar->addWidget(new QLabel("tiap"));
+    gbar->addWidget(gridStep);
+    gbar->addStretch();
+    mv->addLayout(gbar);
+    mv->addWidget(canvas_, 1);
+
     auto* tabs = new QTabWidget;
     tabs->addTab(buildJobTab(), "Gambar / Plot");
     tabs->addTab(buildTextTab(), "Teks");
@@ -79,7 +112,7 @@ MainWindow::MainWindow() {
 
     auto* split = new QSplitter;
     split->addWidget(left);
-    split->addWidget(canvas_);
+    split->addWidget(mid);
     split->addWidget(tabs);
     split->setStretchFactor(1, 3);
     split->setStretchFactor(2, 2);

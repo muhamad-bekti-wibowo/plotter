@@ -35,10 +35,23 @@ void CanvasView::paintEvent(QPaintEvent*) {
     p.setPen(QPen(QColor(120, 120, 120), 1));
     p.setBrush(Qt::white);
     p.drawRect(QRectF(map(0, h_), map(w_, 0)));
-    p.setPen(QColor(235, 235, 235));
-    double grid = w_ > 400 ? 50 : (w_ > 120 ? 10 : 5);
-    for (double x = grid; x < w_; x += grid) p.drawLine(map(x, 0), map(x, h_));
-    for (double y = grid; y < h_; y += grid) p.drawLine(map(0, y), map(w_, y));
+    if (grid_ && gridCm_ > 0) {
+        const double g = gridCm_ * 10;                                  // cm -> mm
+        if (g * s >= 4) {                                               // jangan gambar kalau terlalu rapat di layar
+            int i = 1;
+            for (double x = g; x < w_ - 1e-6; x += g, i++) { p.setPen(i % 5 ? QColor(228, 228, 228) : QColor(195, 195, 195)); p.drawLine(map(x, 0), map(x, h_)); }
+            i = 1;
+            for (double y = g; y < h_ - 1e-6; y += g, i++) { p.setPen(i % 5 ? QColor(228, 228, 228) : QColor(195, 195, 195)); p.drawLine(map(0, y), map(w_, y)); }
+            // label skala tiap garis tebal (5 kotak) bila cukup ruang
+            if (g * s * 5 >= 40) {
+                p.setPen(QColor(150, 150, 150));
+                QFont f = p.font(); f.setPointSizeF(7.5); p.setFont(f);
+                for (double x = g * 5; x < w_ - 1e-6; x += g * 5) p.drawText(map(x, 0) + QPointF(2, -3), QString::number(x / 10) + " cm");
+                for (double y = g * 5; y < h_ - 1e-6; y += g * 5) p.drawText(map(0, y) + QPointF(2, -2), QString::number(y / 10) + " cm");
+                f.setPointSizeF(9); p.setFont(f);
+            }
+        }
+    }
 
     int done = int(progress_ * totalPts_), seen = 0;
     for (const Polyline& l : paths_) {
@@ -61,4 +74,10 @@ void CanvasView::paintEvent(QPaintEvent*) {
         p.drawLine(g + QPointF(0, -8), g + QPointF(0, 8));
         p.drawEllipse(g, 5, 5);
     }
+}
+
+void CanvasView::setGrid(bool on, double stepCm) {
+    grid_ = on;
+    gridCm_ = stepCm;
+    update();
 }
