@@ -38,18 +38,19 @@ void CanvasView::paintEvent(QPaintEvent*) {
     if (grid_ && gridCm_ > 0) {
         const double g = gridCm_ * 10;                                  // cm -> mm
         if (g * s >= 4) {                                               // jangan gambar kalau terlalu rapat di layar
+            const int major = g < 10 ? std::max(1, int(std::lround(10 / g))) : 5;   // garis tebal: tiap 1 cm (langkah < 1 cm) atau tiap 5 kotak
             int i = 1;
-            for (double x = g; x < w_ - 1e-6; x += g, i++) { p.setPen(i % 5 ? QColor(228, 228, 228) : QColor(195, 195, 195)); p.drawLine(map(x, 0), map(x, h_)); }
+            for (double x = g; x < w_ - 1e-6; x += g, i++) { p.setPen(i % major ? QColor(232, 232, 232) : QColor(190, 190, 190)); p.drawLine(map(x, 0), map(x, h_)); }
             i = 1;
-            for (double y = g; y < h_ - 1e-6; y += g, i++) { p.setPen(i % 5 ? QColor(228, 228, 228) : QColor(195, 195, 195)); p.drawLine(map(0, y), map(w_, y)); }
-            // label skala tiap garis tebal (5 kotak) bila cukup ruang
-            if (g * s * 5 >= 40) {
-                p.setPen(QColor(150, 150, 150));
-                QFont f = p.font(); f.setPointSizeF(7.5); p.setFont(f);
-                for (double x = g * 5; x < w_ - 1e-6; x += g * 5) p.drawText(map(x, 0) + QPointF(2, -3), QString::number(x / 10) + " cm");
-                for (double y = g * 5; y < h_ - 1e-6; y += g * 5) p.drawText(map(0, y) + QPointF(2, -2), QString::number(y / 10) + " cm");
-                f.setPointSizeF(9); p.setFont(f);
-            }
+            for (double y = g; y < h_ - 1e-6; y += g, i++) { p.setPen(i % major ? QColor(232, 232, 232) : QColor(190, 190, 190)); p.drawLine(map(0, y), map(w_, y)); }
+            const double G = g * major;
+            int every = 1;
+            while (G * s * every < 45) every++;                        // label tidak bertumpuk
+            p.setPen(QColor(140, 140, 140));
+            QFont f = p.font(); f.setPointSizeF(7.5); p.setFont(f);
+            for (double x = G * every; x < w_ - 1e-6; x += G * every) p.drawText(map(x, 0) + QPointF(2, -3), QString::number(x / 10) + " cm");
+            for (double y = G * every; y < h_ - 1e-6; y += G * every) p.drawText(map(0, y) + QPointF(2, -2), QString::number(y / 10) + " cm");
+            f.setPointSizeF(9); p.setFont(f);
         }
     }
 

@@ -27,6 +27,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
+#include <QShortcut>
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
@@ -70,21 +71,26 @@ MainWindow::MainWindow() {
     left->setMaximumWidth(280);
 
     // pratinjau: grid skala (cm) bisa dimatikan
-    auto* mid = new QWidget;
-    auto* mv = new QVBoxLayout(mid);
-    mv->setContentsMargins(0, 0, 0, 0);
-    auto* gbar = new QHBoxLayout;
+    auto* mid = canvas_;
+    auto* gpanel = new QWidget(canvas_);                 // overlay di pojok kiri atas kanvas
+    gpanel->setStyleSheet("QWidget{background:rgba(255,255,255,215);border-radius:4px;color:#222} QCheckBox,QLabel{background:transparent}");
+    auto* gbar = new QHBoxLayout(gpanel);
+    gbar->setContentsMargins(8, 4, 8, 4);
     auto* gridOn = new QCheckBox("Grid");
+    gridOn->setToolTip("Tampilkan/sembunyikan grid skala (pintasan: G)");
     auto* gridStep = new QDoubleSpinBox;
-    gridStep->setRange(0.5, 50);
+    gridStep->setRange(0.1, 50);
     gridStep->setDecimals(1);
-    gridStep->setSingleStep(0.5);
+    gridStep->setSingleStep(0.1);
     gridStep->setSuffix(" cm");
+    gridStep->setToolTip("Jarak antar garis grid (0,1 cm = 1 mm)");
     {
         QSettings st;
         gridOn->setChecked(st.value("gridOn", true).toBool());
-        gridStep->setValue(st.value("gridCm", 1.0).toDouble());
+        gridStep->setValue(st.value("gridCm", 0.5).toDouble());
     }
+    auto* gsc = new QShortcut(QKeySequence("G"), this);
+    connect(gsc, &QShortcut::activated, gridOn, &QCheckBox::toggle);
     auto applyGrid = [this, gridOn, gridStep] {
         canvas_->setGrid(gridOn->isChecked(), gridStep->value());
         gridStep->setEnabled(gridOn->isChecked());
@@ -98,9 +104,9 @@ MainWindow::MainWindow() {
     gbar->addWidget(gridOn);
     gbar->addWidget(new QLabel("tiap"));
     gbar->addWidget(gridStep);
-    gbar->addStretch();
-    mv->addLayout(gbar);
-    mv->addWidget(canvas_, 1);
+    gpanel->adjustSize();
+    gpanel->move(6, 6);
+    gpanel->raise();
 
     auto* tabs = new QTabWidget;
     tabs->addTab(buildJobTab(), "Gambar / Plot");
